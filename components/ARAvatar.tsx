@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import './ChromaKeyMaterial';
@@ -7,35 +7,50 @@ import './ChromaKeyMaterial';
 interface ARAvatarProps {
   videoUrl: string;
   position: [number, number, number];
-  scale?: number;
   rotation?: number;
 }
 
 const ARAvatar: React.FC<ARAvatarProps> = ({ 
   videoUrl, 
   position, 
-  scale = 1.8, // Default life-size (1.8 meters)
   rotation = 0 
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const textureRef = useRef<THREE.VideoTexture | null>(null);
   const materialRef = useRef<any>(null);
+  const [aspect, setAspect] = useState(1);
 
   useEffect(() => {
     const video = document.createElement('video');
     video.src = videoUrl;
     video.crossOrigin = 'Anonymous';
     video.loop = true;
-    video.muted = false; // Note: Sound requires user interaction
+    video.muted = false;
     video.playsInline = true;
     video.setAttribute('webkit-playsinline', 'true');
-    video.play().catch(err => console.warn("Video play blocked until interaction:", err));
+    
+    video.onloadedmetadata = () => {
+      setAspect(video.videoWidth / video.videoHeight);
+    };
+
+    // Force play on mount - usually works if triggered by user gesture (like the AR placement tap)
+    video.play().catch(err => {
+      console.warn("Autoplay blocked, waiting for interaction:", err);
+      // Fallback: try to play again on next touch
+      const playHandler = () => {
+        video.play();
+        window.removeEventListener('touchstart', playHandler);
+      };
+      window.addEventListener('touchstart', playHandler);
+    });
     
     videoRef.current = video;
-    textureRef.current = new THREE.VideoTexture(video);
-    textureRef.current.minFilter = THREE.LinearFilter;
-    textureRef.current.magFilter = THREE.LinearFilter;
-    textureRef.current.format = THREE.RGBAFormat;
+    const texture = new THREE.VideoTexture(video);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.format = THREE.RGBAFormat;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    textureRef.current = texture;
 
     return () => {
       video.pause();
@@ -50,10 +65,8 @@ const ARAvatar: React.FC<ARAvatarProps> = ({
     }
   });
 
-  // Calculate aspect ratio of video to maintain proportions
-  // We assume a standard vertical or horizontal video, adjusted to life-size height
-  const width = 1.0; 
-  const height = 1.8;
+  const height = 1.8; // Life-size height in meters
+  const width = height * aspect;
 
   return (
     <group position={position} rotation={[0, rotation, 0]}>

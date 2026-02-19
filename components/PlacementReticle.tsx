@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 interface PlacementReticleProps {
   onPlace: (position: THREE.Vector3) => void;
@@ -11,6 +12,7 @@ interface PlacementReticleProps {
 const PlacementReticle: React.FC<PlacementReticleProps> = ({ onPlace, isPlaced }) => {
   const reticleRef = useRef<THREE.Group>(null);
   const [hitTestSource, setHitTestSource] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(true);
   const { gl } = useThree();
 
   useEffect(() => {
@@ -28,7 +30,7 @@ const PlacementReticle: React.FC<PlacementReticleProps> = ({ onPlace, isPlaced }
           setHitTestSource(localHitTestSource);
         }
       } catch (err) {
-        console.warn("Markerless Hit Test Source could not be initialized:", err);
+        console.error("Hit Test Source failed:", err);
       }
 
       const onSelect = () => {
@@ -40,18 +42,12 @@ const PlacementReticle: React.FC<PlacementReticleProps> = ({ onPlace, isPlaced }
       session.addEventListener('select', onSelect);
     };
 
-    if (gl.xr.getSession()) {
-      setupHitTest();
-    }
-    
-    const onStart = () => setupHitTest();
-    gl.xr.addEventListener('sessionstart', onStart);
+    if (gl.xr.getSession()) setupHitTest();
+    gl.xr.addEventListener('sessionstart', setupHitTest);
 
     return () => {
-      gl.xr.removeEventListener('sessionstart', onStart);
-      if (localHitTestSource && localHitTestSource.cancel) {
-        localHitTestSource.cancel();
-      }
+      gl.xr.removeEventListener('sessionstart', setupHitTest);
+      if (localHitTestSource?.cancel) localHitTestSource.cancel();
     };
   }, [gl.xr, onPlace, isPlaced]);
 
@@ -73,6 +69,7 @@ const PlacementReticle: React.FC<PlacementReticleProps> = ({ onPlace, isPlaced }
 
         if (pose) {
           reticleRef.current.visible = true;
+          setIsSearching(false);
           reticleRef.current.position.set(
             pose.transform.position.x,
             pose.transform.position.y,
@@ -84,29 +81,36 @@ const PlacementReticle: React.FC<PlacementReticleProps> = ({ onPlace, isPlaced }
             pose.transform.orientation.z,
             pose.transform.orientation.w
           );
-        } else {
-          reticleRef.current.visible = false;
         }
       } else {
         reticleRef.current.visible = false;
+        setIsSearching(true);
       }
     }
   });
 
   return (
     <group ref={reticleRef} visible={false}>
+      {/* Visual Ring */}
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.09, 0.11, 48]} />
-        <meshBasicMaterial color="white" transparent opacity={0.6} />
+        <ringGeometry args={[0.12, 0.14, 64]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
       </mesh>
+      
+      {/* Inner Point */}
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.02, 32]} />
         <meshBasicMaterial color="#3b82f6" />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
-        <ringGeometry args={[0.11, 0.12, 48]} />
-        <meshBasicMaterial color="#3b82f6" transparent opacity={0.2} />
-      </mesh>
+
+      {/* Floating Instruction Text */}
+      {!isPlaced && !isSearching && (
+        <Html position={[0, 0.2, 0]} center>
+          <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg whitespace-nowrap animate-bounce pointer-events-none">
+            Tap to Place Mira
+          </div>
+        </Html>
+      )}
     </group>
   );
 };

@@ -5,15 +5,15 @@ import { extend } from '@react-three/fiber';
 
 /**
  * ChromaKeyMaterial
- * Removes green background (0, 1, 0) from a texture.
+ * Advanced green screen removal with spill suppression.
  */
 const ChromaKeyMaterialImpl = shaderMaterial(
   {
     uTexture: null,
-    uColor: new THREE.Color(0.0, 1.0, 0.0),
-    uSimilarity: 0.4,
-    uSmoothness: 0.08,
-    uSpill: 0.1,
+    uColor: new THREE.Color(0.05, 0.63, 0.14), // Targeted green from standard chroma backgrounds
+    uSimilarity: 0.35,
+    uSmoothness: 0.1,
+    uSpill: 0.15,
   },
   // Vertex Shader
   `
@@ -35,16 +35,21 @@ const ChromaKeyMaterialImpl = shaderMaterial(
     void main() {
       vec4 videoColor = texture2D(uTexture, vUv);
       
-      float distance = distance(videoColor.rgb, uColor);
-      float alpha = smoothstep(uSimilarity, uSimilarity + uSmoothness, distance);
+      // Calculate distance in RGB space for chroma keying
+      float dist = distance(videoColor.rgb, uColor);
       
-      // Basic spill reduction: if it's close to green, desaturate the green channel a bit
-      float spillVal = pow(smoothstep(uSimilarity, uSimilarity + uSpill, distance), 1.5);
-      vec3 finalColor = mix(videoColor.rgb, vec3(videoColor.r, (videoColor.r + videoColor.b) * 0.5, videoColor.b), 1.0 - spillVal);
+      // Create alpha mask based on similarity to target green
+      float alpha = smoothstep(uSimilarity, uSimilarity + uSmoothness, dist);
+      
+      // Spill suppression: reduce green influence on non-keyed areas
+      float spillVal = pow(smoothstep(uSimilarity, uSimilarity + uSpill, dist), 1.5);
+      vec3 desaturatedGreen = vec3(videoColor.r, (videoColor.r + videoColor.b) * 0.5, videoColor.b);
+      vec3 finalColor = mix(desaturatedGreen, videoColor.rgb, spillVal);
 
       gl_FragColor = vec4(finalColor, alpha);
       
-      if (gl_FragColor.a < 0.1) discard;
+      // Discard pixels to ensure perfect transparency for WebGL depth testing
+      if (gl_FragColor.a < 0.05) discard;
     }
   `
 );
