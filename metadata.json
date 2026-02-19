@@ -1,0 +1,7 @@
+{
+  "name": "HoloPresence WebAR",
+  "description": "A high-end WebAR application for placing life-size, chroma-keyed video avatars in the real world using markerless surface detection.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
